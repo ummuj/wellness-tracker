@@ -2,13 +2,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wellness & Exercise Tracker (Static)</title>
+    <title>Wellness Dashboard & Daily Tracker (Local Storage)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Library for generating image snapshots of HTML content -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- Font and Icons -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
     <style>
         :root {
             --c-dark-blue: #0A2463;
@@ -23,767 +27,1179 @@
             background-color: var(--c-light-gray);
             color: var(--c-dark-blue);
         }
+        .header {
+            background-color: var(--c-dark-blue);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+        }
+        .nav-link {
+            color: var(--c-white);
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            transition: background-color 0.2s;
+        }
+        .nav-link:hover {
+            background-color: var(--c-mid-blue);
+        }
+        .nav-link.active {
+            background-color: var(--c-mid-blue);
+            font-weight: 600;
+        }
         .card {
             background-color: var(--c-white);
-            border-radius: 12px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+            border-radius: 1rem;
             padding: 1.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease-in-out;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        .btn-primary {
+            background-color: var(--c-dark-blue);
+            color: var(--c-white);
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        .btn-primary:hover {
+            background-color: var(--c-mid-blue);
+            transform: translateY(-1px);
+        }
+        .btn-secondary {
+            background-color: var(--c-mid-blue);
+            color: var(--c-white);
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            transition: background-color 0.2s;
+        }
+        .btn-secondary:hover {
+            background-color: var(--c-dark-blue);
         }
         .chart-container {
             position: relative;
-            height: 250px;
-        }
-        .list-container {
-            max-height: 250px;
-            overflow-y: auto;
-        }
-        .list-container::-webkit-scrollbar {
-            width: 6px;
-        }
-        .list-container::-webkit-scrollbar-thumb {
-            background: var(--c-mid-blue);
-            border-radius: 10px;
-        }
-        .list-container::-webkit-scrollbar-track {
-            background: var(--c-light-gray);
-        }
-        .file-input-label {
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .file-input-label:hover {
-            background-color: var(--c-mid-blue);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        .input-field {
-            @apply w-full p-2 border border-gray-300 rounded-lg focus:ring-[var(--c-mid-blue)] focus:border-[var(--c-mid-blue)];
-        }
-        .loading-ring {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(10, 36, 99, 0.3);
-            border-radius: 50%;
-            border-top-color: var(--c-dark-blue);
-            animation: spin 1s ease-in-out infinite;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+            /* h-72 is 18rem or 288px */
         }
         .placeholder {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            background-color: #f3f4f6;
-            border-radius: 8px;
-            height: 100%;
-            padding: 20px;
+            background-color: #f0f0f0;
+            border-radius: 0.75rem;
             text-align: center;
+            padding: 1rem;
+            color: #777;
         }
     </style>
-    <script>
-        // --- Static Data Storage (using localStorage) ---
-        const LS_KEY_METRICS = 'tracker_dailyMetrics';
-        const LS_KEY_NUTRITION = 'tracker_nutritionData';
-        const LS_KEY_EXERCISE = 'tracker_exerciseData';
-        const LS_KEY_WEIGHT = 'tracker_weightHistory';
-
-        // Global Data State
-        let activeMealType = 'breakfast';
-        let nutritionData = { breakfast: [], lunch: [], dinner: [], snacks: [] };
-        let dailyMetrics = { weight: null, calorieGoal: 2000, sleepDuration: null, restingHeartRate: null, notes: '' };
-        let exerciseData = [];
-        let weightHistory = [];
-
-        // Chart configuration colors
-        const chartColors = {
-            dark_blue: 'rgb(10, 36, 99)',
-            mid_blue: 'rgb(62, 146, 204)',
-            bright_red: 'rgb(216, 49, 91)',
-            mid_blue_bg: 'rgba(62, 146, 204, 0.2)',
-            green: 'rgb(61, 204, 123)',
-            green_bg: 'rgba(61, 204, 123, 0.2)',
-        };
-
-        // --- Utility Functions ---
-
-        const todayDate = () => new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-
-        function loadState() {
-            try {
-                const storedMetrics = localStorage.getItem(LS_KEY_METRICS);
-                if (storedMetrics) dailyMetrics = JSON.parse(storedMetrics);
-                
-                const storedNutrition = localStorage.getItem(LS_KEY_NUTRITION);
-                if (storedNutrition) nutritionData = JSON.parse(storedNutrition);
-
-                const storedExercise = localStorage.getItem(LS_KEY_EXERCISE);
-                if (storedExercise) exerciseData = JSON.parse(storedExercise);
-                
-                const storedWeight = localStorage.getItem(LS_KEY_WEIGHT);
-                if (storedWeight) {
-                    weightHistory = JSON.parse(storedWeight);
-                    // Ensure unique entries per day, only keeping the latest if duplicates exist
-                    const uniqueWeights = {};
-                    weightHistory.forEach(w => uniqueWeights[w.date] = w);
-                    weightHistory = Object.values(uniqueWeights);
-                    weightHistory.sort((a, b) => new Date(a.date) - new Date(b.date));
-                }
-            } catch (e) {
-                console.error("Error loading state from localStorage:", e);
-            }
-        }
-
-        function saveState() {
-            localStorage.setItem(LS_KEY_METRICS, JSON.stringify(dailyMetrics));
-            localStorage.setItem(LS_KEY_NUTRITION, JSON.stringify(nutritionData));
-            localStorage.setItem(LS_KEY_EXERCISE, JSON.stringify(exerciseData));
-            localStorage.setItem(LS_KEY_WEIGHT, JSON.stringify(weightHistory));
-            document.getElementById('saveStatus').textContent = 'Saved to local storage.';
-            setTimeout(() => document.getElementById('saveStatus').textContent = '', 2000);
-        }
-
-        function fileToBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result.split(',')[1]);
-                reader.onerror = error => reject(error);
-                reader.readAsDataURL(file);
-            });
-        }
-
-        // --- Data Handlers - Metrics & Weight ---
-        
-        window.saveMetrics = () => {
-            const date = todayDate();
-            
-            // Read inputs
-            const weight = parseFloat(document.getElementById('weightInput').value) || null;
-            const calorieGoal = parseFloat(document.getElementById('calorieGoalInput').value) || 2000;
-            const sleepDuration = parseFloat(document.getElementById('sleepDurationInput').value) || null;
-            const restingHeartRate = parseFloat(document.getElementById('restingHeartRateInput').value) || null;
-            const notes = document.getElementById('notesInput').value.trim();
-
-            // Update dailyMetrics
-            dailyMetrics = {
-                weight, calorieGoal, sleepDuration, restingHeartRate, notes
-            };
-            
-            // Update weightHistory (if weight is provided)
-            if (weight) {
-                const existingIndex = weightHistory.findIndex(entry => entry.date === date);
-                const newEntry = { date: date, weight: weight };
-                
-                if (existingIndex !== -1) {
-                    weightHistory[existingIndex] = newEntry; // Update existing
-                } else {
-                    weightHistory.push(newEntry); // Add new
-                    weightHistory.sort((a, b) => new Date(a.date) - new Date(b.date)); // Keep sorted
-                }
-            }
-            
-            saveState();
-            updateMetricsUI();
-            updateGoalChart();
-            createWeightTrendChart(weightHistory);
-        }
-
-        // --- Data Handlers - Exercise ---
-
-        window.handleExerciseInput = (event) => {
-            event.preventDefault();
-
-            const form = event.target;
-            const activity = form.activityType.value.trim();
-            const duration = parseFloat(form.durationMinutes.value);
-            const avgHeartRate = parseFloat(form.avgHeartRate.value) || null;
-
-            if (!activity || !duration || duration <= 0) {
-                document.getElementById('exerciseStatus').textContent = 'Please enter a valid activity and duration.';
-                setTimeout(() => document.getElementById('exerciseStatus').textContent = '', 3000);
-                return;
-            }
-
-            const entry = {
-                id: Date.now(), // Use timestamp as a unique ID
-                date: todayDate(),
-                activity: activity,
-                duration_minutes: duration,
-                avg_heart_rate: avgHeartRate,
-            };
-            
-            exerciseData.push(entry);
-            saveState();
-            form.reset();
-            updateExerciseUI();
-            document.getElementById('exerciseStatus').textContent = 'Exercise logged successfully!';
-            setTimeout(() => document.getElementById('exerciseStatus').textContent = '', 3000);
-        }
-        
-        function updateExerciseUI() {
-            const listContainer = document.getElementById('exerciseList');
-            listContainer.innerHTML = '';
-
-            const totalDuration = exerciseData.reduce((sum, entry) => sum + entry.duration_minutes, 0);
-            document.getElementById('totalDurationDisplay').textContent = `${totalDuration.toFixed(0)} minutes`;
-
-            if (exerciseData.length === 0) {
-                listContainer.innerHTML = `<p class="text-center text-gray-500 py-4">No activities logged today.</p>`;
-            } else {
-                exerciseData.forEach(entry => {
-                    const listItem = document.createElement('div');
-                    listItem.className = 'flex justify-between items-center py-2 px-3 mb-1 bg-gray-50 rounded-lg border border-gray-200';
-                    listItem.innerHTML = `
-                        <span class="font-medium text-sm text-[var(--c-dark-blue)]">${entry.activity}</span>
-                        <div class="text-right">
-                            <span class="text-xs block text-gray-500">${entry.avg_heart_rate ? entry.avg_heart_rate + ' BPM (Avg HR)' : ''}</span>
-                            <span class="text-sm text-[var(--c-green)] font-semibold">${entry.duration_minutes.toFixed(0)} mins</span>
-                        </div>
-                    `;
-                    listContainer.appendChild(listItem);
-                });
-            }
-        }
-
-
-        // --- Data Handlers - Nutrition ---
-
-        /** Saves a new nutrition entry to local state and storage. */
-        function saveNutritionEntry(mealType, entryName, calories, protein, carbs, fat) {
-            const entry = {
-                id: Date.now(),
-                date: todayDate(),
-                mealType: mealType,
-                name: entryName,
-                calories: Number(calories) || 0,
-                protein_g: Number(protein) || 0,
-                carbs_g: Number(carbs) || 0,
-                fat_g: Number(fat) || 0,
-            };
-
-            if (nutritionData[mealType]) {
-                nutritionData[mealType].push(entry);
-                saveState();
-                updateNutritionUI();
-                updateGoalChart();
-            }
-        }
-
-        // --- AI Simulation (Gemini Vision) ---
-        
-        window.analyzeFoodPhoto = async (file) => {
-            const aiStatusEl = document.getElementById('aiStatus');
-            aiStatusEl.innerHTML = '<span class="loading-ring mr-2"></span> Analyzing photo... please wait.';
-            
-            const mealType = document.getElementById('mealTypeSelectorInput').value;
-            
-            if (file) {
-                 // Simulate API call delay
-                await new Promise(resolve => setTimeout(resolve, 1500));
-            }
-
-            // Mocked Structured Response (simulating the JSON output)
-            const analysis = {
-                food_name: "Simulated Chicken & Rice Bowl",
-                estimated_calories: 480,
-                macros: { 
-                    protein_g: 40, 
-                    carbs_g: 55, 
-                    fat_g: 15 
-                }
-            };
-
-            try {
-                aiStatusEl.textContent = `Analysis complete for ${analysis.food_name}! Logging...`;
-                
-                saveNutritionEntry(
-                    mealType,
-                    analysis.food_name,
-                    analysis.estimated_calories,
-                    analysis.macros.protein_g,
-                    analysis.macros.carbs_g,
-                    analysis.macros.fat_g
-                );
-
-                aiStatusEl.textContent = 'Logged successfully!';
-                
-            } catch (error) {
-                console.error("AI Analysis or Save Error: ", error);
-                aiStatusEl.textContent = `Error: ${error.message}`;
-            } finally {
-                setTimeout(() => aiStatusEl.textContent = 'Ready for next analysis.', 5000);
-            }
-        }
-
-        /** Handles file selection for photo analysis. */
-        window.handleFileSelect = (event) => {
-            const file = event.target.files[0];
-            if (file && file.type.startsWith('image/')) {
-                analyzeFoodPhoto(file);
-            } else {
-                document.getElementById('aiStatus').textContent = 'Please select a valid image file.';
-            }
-            event.target.value = ''; 
-        }
-        
-        // --- UI Update and Charting ---
-
-        /** Updates the Weight Summary, Sleep, and RHR display. */
-        function updateMetricsUI() {
-            // Update inputs with current state
-            document.getElementById('weightInput').value = dailyMetrics.weight || '';
-            document.getElementById('calorieGoalInput').value = dailyMetrics.calorieGoal || 2000;
-            document.getElementById('sleepDurationInput').value = dailyMetrics.sleepDuration || '';
-            document.getElementById('restingHeartRateInput').value = dailyMetrics.restingHeartRate || '';
-            document.getElementById('notesInput').value = dailyMetrics.notes || '';
-
-            // Update summary display
-            const weight = dailyMetrics.weight;
-            const sleepDuration = dailyMetrics.sleepDuration;
-            const restingHeartRate = dailyMetrics.restingHeartRate; 
-            
-            document.getElementById('currentWeightDisplay').textContent = weight ? `${weight.toFixed(1)} kg` : 'N/A';
-            
-            let weightChange = 0;
-            if (weightHistory.length >= 2) {
-                // Get the last two unique, valid weight entries
-                const currentWeight = weightHistory[weightHistory.length - 1].weight;
-                const lastWeight = weightHistory[weightHistory.length - 2].weight;
-                
-                if (currentWeight !== undefined && lastWeight !== undefined) {
-                    weightChange = currentWeight - lastWeight;
-                }
-            }
-            
-            const weightChangeEl = document.getElementById('weightChangeDisplay');
-            if (weightHistory.length < 2) {
-                 weightChangeEl.textContent = 'Log more entries for trend.';
-                 weightChangeEl.className = 'text-sm font-medium text-gray-500';
-            } else {
-                 weightChangeEl.textContent = `Change from last entry: ${weightChange.toFixed(1)} kg`;
-                 weightChangeEl.className = 'text-sm font-medium ' + (
-                    weightChange < 0 ? 'text-green-600' : 
-                    (weightChange > 0 ? 'text-red-600' : 'text-gray-600')
-                );
-            }
-            
-            document.getElementById('sleepDisplay').textContent = sleepDuration ? `${sleepDuration} hours` : 'N/A';
-            document.getElementById('rhrDisplay').textContent = restingHeartRate ? `${restingHeartRate} BPM` : 'N/A';
-            document.getElementById('notesDisplay').textContent = dailyMetrics.notes || 'No detailed notes logged.';
-        }
-
-
-        /** Calculates total daily calories. */
-        function calculateTotalCalories() {
-            let totalCalories = 0;
-            Object.values(nutritionData).forEach(mealEntries => {
-                mealEntries.forEach(entry => {
-                    totalCalories += entry.calories;
-                });
-            });
-            return totalCalories;
-        }
-
-        /** Updates the nutrition tracker list and summary based on the current activeMealType. */
-        function updateNutritionUI() {
-            const totalCalories = calculateTotalCalories();
-            const calorieGoal = dailyMetrics.calorieGoal || 2000;
-            
-            document.getElementById('calorieGoalDisplay').textContent = `${calorieGoal.toFixed(0)} kcal`;
-
-            // 1. Update Active Meal List
-            const listContainer = document.getElementById('currentMealList');
-            listContainer.innerHTML = ''; 
-            const currentMealEntries = nutritionData[activeMealType] || [];
-            
-            // Update the display title to reflect the selected view
-            document.getElementById('mealViewHeader').textContent = `${activeMealType.charAt(0).toUpperCase() + activeMealType.slice(1)} Items`;
-            
-            if (currentMealEntries.length === 0) {
-                listContainer.innerHTML = `<p class="text-center text-gray-500 py-4">No ${activeMealType} logged yet.</p>`;
-            } else {
-                currentMealEntries.forEach(entry => {
-                    const listItem = document.createElement('div');
-                    listItem.className = 'flex justify-between items-center py-2 px-3 mb-1 bg-gray-50 rounded-lg border border-gray-200';
-                    listItem.innerHTML = `
-                        <span class="font-medium text-sm">${entry.name}</span>
-                        <span class="text-sm text-gray-600">${entry.calories.toFixed(0)} Cal</span>
-                    `;
-                    listContainer.appendChild(listItem);
-                });
-            }
-
-            // 2. Update Total Calorie Count for the whole day
-            document.getElementById('totalDailyCalories').textContent = `${totalCalories.toFixed(0)} kcal`;
-        }
-
-        let calorieChartInstance = null;
-        /** Updates the Goal Progress Chart. */
-        function updateGoalChart() {
-            const consumed = calculateTotalCalories();
-            const goal = dailyMetrics.calorieGoal || 2000;
-            const remaining = Math.max(0, goal - consumed);
-            const exceeded = consumed > goal ? consumed - goal : 0;
-            const remainingForChart = remaining > 0 ? remaining : 0;
-            
-            const dataPoints = consumed > goal 
-                ? [goal, exceeded] 
-                : [consumed, remainingForChart];
-            
-            const labels = consumed > goal 
-                ? ['Goal Consumed', 'Exceeded Goal'] 
-                : ['Consumed Calories', 'Remaining Goal'];
-            
-            const colors = consumed > goal 
-                ? [chartColors.dark_blue, chartColors.bright_red] 
-                : [chartColors.dark_blue, chartColors.mid_blue_bg];
-
-            if (calorieChartInstance) calorieChartInstance.destroy();
-            const ctx = document.getElementById('calorieGoalChart').getContext('2d');
-
-            calorieChartInstance = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        data: dataPoints,
-                        backgroundColor: colors,
-                        hoverOffset: 4,
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'bottom', labels: { color: chartColors.dark_blue, font: { size: 12, family: 'Inter' } } },
-                        tooltip: { callbacks: { label: (context) => `${context.label}: ${context.parsed.toFixed(0)} kcal` } }
-                    },
-                }
-            });
-            // Update the center text summary
-            document.getElementById('calorieSummaryText').innerHTML = `<span class="text-3xl font-bold text-[var(--c-dark-blue)]">${consumed.toFixed(0)}</span> / ${goal.toFixed(0)} kcal`;
-        }
-
-        let weightChartInstance = null;
-        /** Creates or updates the Weight Trend Chart. */
-        function createWeightTrendChart(history) {
-            if (weightChartInstance) weightChartInstance.destroy();
-            
-            const validHistory = history.filter(item => item.weight !== null && item.weight !== undefined);
-
-            const dataPoints = validHistory.map(item => item.weight);
-            const labels = validHistory.map(item => new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-
-            const chartEl = document.getElementById('weightTrendChart');
-            const placeholderEl = document.getElementById('weightTrendPlaceholder');
-
-            if (dataPoints.length < 2) {
-                 chartEl.classList.add('hidden');
-                 placeholderEl.classList.remove('hidden');
-                 return;
-            } else {
-                 chartEl.classList.remove('hidden');
-                 placeholderEl.classList.add('hidden');
-            }
-
-            const ctx = chartEl.getContext('2d');
-            weightChartInstance = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Weight (kg)',
-                        data: dataPoints,
-                        fill: true,
-                        backgroundColor: chartColors.mid_blue_bg,
-                        borderColor: chartColors.mid_blue,
-                        tension: 0.2,
-                        pointBackgroundColor: chartColors.mid_blue,
-                        pointBorderColor: '#fff',
-                        pointHoverRadius: 6,
-                        pointRadius: 4,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: { y: { beginAtZero: false, grid: { color: 'rgba(0, 0, 0, 0.05)' } }, x: { grid: { display: false } } }
-                }
-            });
-        }
-
-
-        // --- Initialisation ---
-
-        /** Changes the meal type being viewed/logged to. */
-        window.switchMealType = (mealType) => {
-            activeMealType = mealType;
-            updateNutritionUI();
-        }
-        
-        /** Handles manual form submission. */
-        window.handleManualInput = (event) => {
-            event.preventDefault();
-            const form = event.target;
-            const mealType = document.getElementById('mealTypeSelectorInput').value;
-            const name = form.foodName.value.trim();
-            const cal = form.calories.value;
-            // Macros are not required for manual input but are saved as 0 for consistency
-            const protein = 0; 
-            const carbs = 0;
-            const fat = 0;
-
-            if (name && cal) {
-                saveNutritionEntry(mealType, name, cal, protein, carbs, fat);
-                form.reset(); 
-            }
-        }
-
-        function loadStateAndInit() {
-            loadState(); // Load data from localStorage
-            
-            // Initialize all UI components based on loaded state
-            updateMetricsUI();
-            updateExerciseUI();
-            updateNutritionUI();
-            updateGoalChart();
-            createWeightTrendChart(weightHistory);
-            
-            // Set the dropdown to the initial active meal type
-            document.getElementById('mealTypeSelectorInput').value = activeMealType;
-
-            // Display localStorage notice
-             document.getElementById('persistenceNotice').textContent = "Data is saved locally in your browser.";
-        }
-
-        window.onload = loadStateAndInit;
-
-    </script>
 </head>
-<body class="p-4 md:p-8">
-    <header class="mb-8">
-        <h1 class="text-3xl font-bold text-center text-[var(--c-dark-blue)]">Wellness & Exercise Tracker</h1>
-        <p id="persistenceNotice" class="text-center text-xs mt-2 text-gray-500 italic"></p>
-        <p id="saveStatus" class="text-center text-xs mt-1 text-green-600 font-semibold"></p>
+<body onload="initApp()">
+
+    <!-- Header & Navigation -->
+    <header class="header sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center py-4">
+            <h1 class="text-3xl font-bold text-white flex items-center">
+                <i class="fas fa-heartbeat text-red-400 mr-3"></i> Wellness Tracker
+            </h1>
+            <nav class="space-x-4">
+                <a href="#" class="nav-link active" data-page="tracker" onclick="showPage('tracker')">Daily Tracker</a>
+                <a href="#" class="nav-link" data-page="dashboard" onclick="showPage('dashboard')">Dashboard</a>
+                <a href="#" class="nav-link" data-page="settings" onclick="showPage('settings')">Settings</a>
+            </nav>
+        </div>
     </header>
 
-    <main class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
+    <main class="max-w-7xl mx-auto pb-12">
         
-        <!-- COLUMN 1: Daily Metrics and Calorie Chart -->
-        <section class="lg:col-span-1 space-y-6">
+        <!-- ---------------------------------------------------- -->
+        <!-- PAGE 1: DAILY TRACKER VIEW -->
+        <!-- ---------------------------------------------------- -->
+        <div id="trackerPage" class="space-y-8 p-4 md:p-8">
+            <h2 class="text-3xl font-bold text-center text-[var(--c-dark-blue)]">Daily Health Metrics & Logging</h2>
+            <p id="userIdDisplay" class="text-sm text-center text-gray-500">Storage Mode: Local Storage</p>
+
+            <!-- Date Selector -->
+            <div class="flex justify-center items-center space-x-4">
+                <button class="btn-secondary" onclick="changeDate(-1)"><i class="fas fa-chevron-left"></i></button>
+                <input type="date" id="currentDate" class="p-2 border border-gray-300 rounded-lg shadow-inner text-center font-semibold text-lg" onchange="loadDayData()">
+                <button class="btn-secondary" onclick="changeDate(1)"><i class="fas fa-chevron-right"></i></button>
+            </div>
             
-            <!-- Daily Metrics Input and Save -->
+            <!-- Metrics Card -->
             <div class="card">
-                <h2 class="text-xl font-semibold mb-4 text-[var(--c-dark-blue)]">Today's Health Metrics</h2>
-                <div class="space-y-4">
-                    <!-- Weight Input -->
-                    <div>
-                        <label for="weightInput" class="block text-sm font-medium text-gray-700 mb-1">Current Weight (kg)</label>
-                        <input type="number" id="weightInput" placeholder="e.g. 75.5" min="0" step="0.1" 
-                            class="input-field" onchange="saveMetrics()">
-                    </div>
-                    <!-- Calorie Goal Input -->
-                    <div>
-                        <label for="calorieGoalInput" class="block text-sm font-medium text-gray-700 mb-1">Daily Calorie Goal (kcal)</label>
-                        <input type="number" id="calorieGoalInput" placeholder="e.g. 2000" min="500" value="2000"
-                            class="input-field" onchange="saveMetrics()">
-                    </div>
-                    <!-- Sleep Duration Input -->
-                    <div>
-                        <label for="sleepDurationInput" class="block text-sm font-medium text-gray-700 mb-1">Sleep Duration (hours)</label>
-                        <input type="number" id="sleepDurationInput" placeholder="e.g. 7.5" min="0" max="24" step="0.5"
-                            class="input-field" onchange="saveMetrics()">
-                    </div>
-                    <!-- Resting Heart Rate Input -->
-                    <div>
-                        <label for="restingHeartRateInput" class="block text-sm font-medium text-gray-700 mb-1">Resting Heart Rate (BPM)</label>
-                        <input type="number" id="restingHeartRateInput" placeholder="e.g. 60" min="30" max="150" 
-                            class="input-field" onchange="saveMetrics()">
-                    </div>
-                    <!-- Notes Input -->
-                    <div>
-                        <label for="notesInput" class="block text-sm font-medium text-gray-700 mb-1">Daily Notes/How I feel</label>
-                        <textarea id="notesInput" rows="2" placeholder="e.g. Had a great workout today, but felt tired in the afternoon."
-                            class="input-field" onchange="saveMetrics()"></textarea>
-                    </div>
-                    <button onclick="saveMetrics()" class="w-full bg-[var(--c-dark-blue)] text-white p-2 rounded-lg font-semibold hover:bg-[var(--c-mid-blue)] transition duration-200">
-                        <i class="fas fa-save mr-2"></i> Save Daily Metrics
-                    </button>
-                    <p id="metricStatus" class="text-center text-sm mt-2 text-gray-500"></p>
-                </div>
-            </div>
-
-            <!-- Calorie Goal Chart -->
-            <div class="card">
-                <h2 class="text-xl font-semibold mb-4 text-[var(--c-dark-blue)]">Calorie Progress</h2>
-                <div class="chart-container relative">
-                    <canvas id="calorieGoalChart"></canvas>
-                    <div id="calorieSummaryText" class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <span class="text-xl font-bold text-gray-400">Loading...</span>
-                    </div>
-                </div>
-                <div class="text-center mt-3 text-sm text-gray-600">Goal: <span id="calorieGoalDisplay" class="font-semibold text-[var(--c-mid-blue)]">2000 kcal</span></div>
-                <div class="mt-4 p-3 rounded-lg border-l-4 border-[var(--c-dark-blue)] bg-[var(--c-dark-blue)]/10 text-[var(--c-dark-blue)] font-bold flex justify-between">
-                    <span>Total Daily Calories:</span>
-                    <span id="totalDailyCalories">0 kcal</span>
-                </div>
-            </div>
-
-            <!-- Sleep, RHR & Notes Summary -->
-             <div class="card">
-                <h2 class="text-xl font-semibold mb-4 text-[var(--c-dark-blue)]">Daily Summary</h2>
-                <div class="space-y-3">
-                    <!-- Resting Heart Rate Display -->
-                    <div class="p-3 bg-gray-50 rounded-lg border-l-4 border-[var(--c-bright-red)] flex justify-between items-center">
-                        <span class="font-medium text-gray-700 flex items-center"><i class="fas fa-heart mr-2 text-[var(--c-bright-red)]"></i> Resting Heart Rate:</span>
-                        <span id="rhrDisplay" class="font-semibold text-[var(--c-dark-blue)]">N/A</span>
-                    </div>
-                    <!-- Sleep Duration Display -->
-                    <div class="p-3 bg-gray-50 rounded-lg border-l-4 border-[var(--c-green)] flex justify-between items-center">
-                        <span class="font-medium text-gray-700 flex items-center"><i class="fas fa-moon mr-2 text-[var(--c-green)]"></i> Sleep Duration:</span>
-                        <span id="sleepDisplay" class="font-semibold text-[var(--c-dark-blue)]">N/A</span>
-                    </div>
-                     <!-- Notes Display -->
-                     <div class="p-3 bg-gray-50 rounded-lg text-sm italic text-gray-600 border-l-4 border-[var(--c-mid-blue)]">
-                        <h4 class="font-semibold text-base mb-1 text-[var(--c-dark-blue)]">Notes:</h4>
-                        <p id="notesDisplay">No detailed notes logged.</p>
-                    </div>
-                </div>
-            </div>
-
-        </section>
-
-        <!-- COLUMN 2: Nutrition Input and List -->
-        <section class="lg:col-span-1 card">
-            <h2 class="text-2xl font-semibold mb-4 text-[var(--c-dark-blue)]">Daily Nutrition Tracker</h2>
-            
-            <!-- Meal Type Dropdown Selector -->
-            <div class="mb-6">
-                <label for="mealTypeSelectorInput" class="block text-sm font-medium text-gray-700 mb-1">Select Meal Type</label>
-                <select id="mealTypeSelectorInput" onchange="switchMealType(this.value)" class="input-field">
-                    <option value="breakfast">Breakfast</option>
-                    <option value="lunch">Lunch</option>
-                    <option value="dinner">Dinner</option>
-                    <option value="snacks">Snacks</option>
-                </select>
-            </div>
-
-            <div id="mealContent">
-                <!-- Input Forms -->
-                <div class="space-y-4 mb-6">
-                    <!-- Manual Input Form -->
-                    <form onsubmit="handleManualInput(event)" class="card p-4 border border-gray-200">
-                        <h4 class="font-semibold text-lg mb-3 flex items-center text-[var(--c-mid-blue)]"><i class="fas fa-keyboard mr-2"></i> Manual Entry (Calories)</h4>
-                        <input type="text" id="foodName" name="foodName" placeholder="Food name (e.g., Oatmeal)" required
-                            class="input-field mb-2">
-                        <div class="grid grid-cols-2 gap-2 mb-3">
-                            <input type="number" id="calories" name="calories" placeholder="Calories (kcal)*" required min="1"
-                                class="input-field col-span-2">
-                        </div>
-                        <button type="submit" class="w-full bg-[var(--c-dark-blue)] text-white p-2 rounded-lg font-semibold hover:bg-[var(--c-mid-blue)] transition duration-200">
-                            Log Meal
-                        </button>
-                    </form>
-
-                    <!-- Photo Analysis Input -->
-                    <div class="card p-4 border border-gray-200 flex flex-col justify-between">
-                        <h4 class="font-semibold text-lg mb-3 flex items-center text-[var(--c-mid-blue)]"><i class="fas fa-camera mr-2"></i> Analyze Food Photo (Simulated AI)</h4>
-                        <p class="text-sm text-gray-600 mb-4">Upload a photo to see a simulated AI analysis and logging process.</p>
-                        
-                        <input type="file" id="photoInput" accept="image/*" onchange="handleFileSelect(event)" class="hidden">
-                        <label for="photoInput" id="photoLabel" class="file-input-label text-center bg-[var(--c-mid-blue)] text-white p-3 rounded-lg font-semibold cursor-pointer hover:bg-[var(--c-mid-blue)]/80 transition duration-200">
-                            <i class="fas fa-cloud-upload-alt mr-2"></i> Select Image
-                        </label>
-                        
-                        <p id="aiStatus" class="mt-3 text-center text-sm text-gray-500 italic">Ready for next analysis.</p>
-                    </div>
-                </div>
-
-                <!-- Logged Meals List -->
-                <h4 class="text-xl font-semibold mb-3 mt-6 text-[var(--c-dark-blue)]" id="mealViewHeader">Logged Items</h4>
-                <div id="currentMealList" class="list-container space-y-2">
-                    <p class="text-center text-gray-500 py-4">No data loaded.</p>
-                </div>
-            </div>
-        </section>
-
-        <!-- COLUMN 3: Exercise Tracker and Weight Trend Chart -->
-        <section class="lg:col-span-1 space-y-6">
-            
-            <!-- Exercise Tracker -->
-            <div class="card">
-                <h2 class="text-xl font-semibold mb-4 text-[var(--c-dark-blue)]">Daily Exercise Tracker</h2>
-                <form onsubmit="handleExerciseInput(event)" class="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-200 mb-4">
-                    <h4 class="font-semibold text-lg flex items-center text-[var(--c-green)]"><i class="fas fa-running mr-2"></i> Log Activity</h4>
+                <h3 class="text-2xl font-semibold mb-6 text-[var(--c-mid-blue)] flex items-center">
+                    <i class="fas fa-list-check mr-2"></i> Daily Metrics
+                </h3>
+                <form id="metricsForm" onsubmit="handleMetricsSubmit(event)" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     
                     <div>
-                        <label for="activityType" class="block text-sm font-medium text-gray-700 mb-1">Activity Type</label>
-                        <select id="activityType" name="activityType" required class="input-field">
-                            <option value="">-- Select Activity --</option>
+                        <label for="steps" class="block text-sm font-medium mb-1">Steps (Count)</label>
+                        <input type="number" id="steps" min="0" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--c-mid-blue)]" placeholder="e.g., 8000">
+                    </div>
+                    
+                    <div>
+                        <label for="sleep" class="block text-sm font-medium mb-1">Sleep (Hours)</label>
+                        <input type="number" id="sleep" min="0" step="0.1" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--c-mid-blue)]" placeholder="e.g., 7.5">
+                    </div>
+                    
+                    <div>
+                        <label for="rhr" class="block text-sm font-medium mb-1">Resting HR (BPM)</label>
+                        <input type="number" id="rhr" min="1" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--c-mid-blue)]" placeholder="e.g., 65">
+                    </div>
+
+                    <div>
+                        <label for="weight" class="block text-sm font-medium mb-1">Weight (Lbs/Kg)</label>
+                        <input type="number" id="weight" min="1" step="0.1" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--c-mid-blue)]" placeholder="e.g., 180.5">
+                    </div>
+
+                    <div class="md:col-span-2 lg:col-span-4 flex justify-center mt-4">
+                        <button type="submit" class="btn-primary w-full md:w-auto">Save Daily Metrics</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Nutrition Card -->
+            <div class="card">
+                <h3 class="text-2xl font-semibold mb-6 text-[var(--c-green)] flex items-center">
+                    <i class="fas fa-utensils mr-2"></i> Nutrition Log
+                </h3>
+                
+                <!-- Calorie Goal & Progress -->
+                <div class="mb-6 flex justify-between items-center bg-gray-50 p-4 rounded-lg border">
+                    <div class="text-lg font-medium">Calorie Goal: <span id="calorieGoalDisplay" class="font-bold text-[var(--c-dark-blue)]">2000</span> kcal</div>
+                    <div class="text-lg font-medium">Today's Intake: <span id="calorieIntakeDisplay" class="font-bold text-[var(--c-dark-blue)]">0</span> kcal</div>
+                    <div class="text-lg font-medium">Remaining: <span id="calorieRemainingDisplay" class="font-bold text-[var(--c-dark-blue)]">2000</span> kcal</div>
+                </div>
+
+                <!-- Meal Type Selector & Manual Input -->
+                <div class="mb-6">
+                    <div class="flex space-x-2 mb-4">
+                        <button class="btn-secondary meal-selector active" data-meal="Breakfast" onclick="switchMealType('Breakfast')">Breakfast</button>
+                        <button class="btn-secondary meal-selector" data-meal="Lunch" onclick="switchMealType('Lunch')">Lunch</button>
+                        <button class="btn-secondary meal-selector" data-meal="Dinner" onclick="switchMealType('Dinner')">Dinner</button>
+                        <button class="btn-secondary meal-selector" data-meal="Snack" onclick="switchMealType('Snack')">Snack</button>
+                    </div>
+
+                    <form onsubmit="handleManualInput(event)" class="flex space-x-3 items-end">
+                        <input type="hidden" id="mealTypeSelectorInput" value="Breakfast">
+                        <div class="flex-grow">
+                            <label for="foodName" class="block text-sm font-medium mb-1">Food/Meal Name</label>
+                            <input type="text" id="foodName" class="w-full p-2 border border-gray-300 rounded-lg" placeholder="e.g., Oatmeal with berries" required>
+                        </div>
+                        <div class="w-24">
+                            <label for="calories" class="block text-sm font-medium mb-1">Calories</label>
+                            <input type="number" id="calories" min="1" class="w-full p-2 border border-gray-300 rounded-lg" placeholder="e.g., 350" required>
+                        </div>
+                        <button type="submit" class="btn-primary self-end whitespace-nowrap"><i class="fas fa-plus mr-1"></i> Add Entry</button>
+                    </form>
+                </div>
+
+                <!-- Log Display -->
+                <div>
+                    <h4 class="text-xl font-semibold mb-3">Logged Items for <span id="activeMealTypeDisplay">Breakfast</span></h4>
+                    <ul id="nutritionLogList" class="space-y-2">
+                        <!-- Nutrition entries will be rendered here -->
+                        <li class="text-gray-500 italic">No entries logged for this meal yet.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Activity Card -->
+            <div class="card">
+                <h3 class="text-2xl font-semibold mb-6 text-[var(--c-bright-red)] flex items-center">
+                    <i class="fas fa-running mr-2"></i> Activity Log
+                </h3>
+                <form onsubmit="handleActivityInput(event)" class="flex space-x-3 items-end">
+                    <div class="w-1/3">
+                        <label for="activityType" class="block text-sm font-medium mb-1">Activity Type</label>
+                        <select id="activityType" class="w-full p-2 border border-gray-300 rounded-lg">
                             <option value="Running">Running</option>
-                            <option value="Weight Lifting">Weight Lifting</option>
-                            <option value="Cycling">Cycling</option>
                             <option value="Walking">Walking</option>
-                            <option value="Yoga">Yoga / Stretching</option>
-                            <option value="Swimming">Swimming</option>
+                            <option value="Weights">Weights</option>
+                            <option value="Yoga">Yoga</option>
+                            <option value="Cycling">Cycling</option>
                             <option value="Other">Other</option>
                         </select>
                     </div>
-                    
-                    <div>
-                        <label for="durationMinutes" class="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)*</label>
-                        <input type="number" id="durationMinutes" name="durationMinutes" placeholder="e.g. 45" required min="1"
-                            class="input-field">
+                    <div class="w-1/3">
+                        <label for="activityDuration" class="block text-sm font-medium mb-1">Duration (Minutes)</label>
+                        <input type="number" id="activityDuration" min="1" class="w-full p-2 border border-gray-300 rounded-lg" placeholder="e.g., 30" required>
                     </div>
-
-                    <!-- Average Heart Rate Input -->
-                    <div>
-                        <label for="avgHeartRate" class="block text-sm font-medium text-gray-700 mb-1">Average Heart Rate (BPM)</label>
-                        <input type="number" id="avgHeartRate" name="avgHeartRate" placeholder="e.g. 140 (Optional)" min="50" max="220"
-                            class="input-field">
+                    <div class="flex-grow">
+                        <label for="activityNotes" class="block text-sm font-medium mb-1">Notes (Optional)</label>
+                        <input type="text" id="activityNotes" class="w-full p-2 border border-gray-300 rounded-lg" placeholder="e.g., park run">
                     </div>
-
-                    <button type="submit" class="w-full bg-[var(--c-green)] text-white p-2 rounded-lg font-semibold hover:bg-[var(--c-green)]/90 transition duration-200">
-                        Log Exercise
-                    </button>
-                    <p id="exerciseStatus" class="text-center text-sm mt-2 text-gray-500"></p>
+                    <button type="submit" class="btn-primary self-end whitespace-nowrap"><i class="fas fa-plus mr-1"></i> Add Activity</button>
                 </form>
 
-                <!-- Exercise List -->
-                <h4 class="text-xl font-semibold mb-3 mt-6 text-[var(--c-dark-blue)]">Logged Activities</h4>
-                <div id="exerciseList" class="list-container space-y-2">
-                    <p class="text-center text-gray-500 py-4">No data loaded.</p>
+                <div class="mt-6">
+                    <h4 class="text-xl font-semibold mb-3">Logged Activities</h4>
+                    <ul id="activityLogList" class="space-y-2">
+                        <!-- Activity entries will be rendered here -->
+                        <li class="text-gray-500 italic">No activities logged for today.</li>
+                    </ul>
                 </div>
+            </div>
+
+        </div>
+
+        <!-- ---------------------------------------------------- -->
+        <!-- PAGE 2: DASHBOARD SUMMARY VIEW -->
+        <!-- ---------------------------------------------------- -->
+        <div id="dashboardPage" class="hidden space-y-8 p-4 md:p-8">
+
+            <!-- Dashboard Header with Snap Button -->
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+                <h2 class="text-3xl font-bold text-[var(--c-dark-blue)]">Progress Dashboard (Last 7 Days)</h2>
+                <button 
+                    id="snapDashboardButton" 
+                    class="btn-primary flex items-center bg-green-500 hover:bg-green-600 mt-4 sm:mt-0" 
+                    onclick="snapDashboard()"
+                >
+                    <i class="fas fa-camera mr-2"></i> Snap Dashboard
+                </button>
+            </div>
+            
+            <!-- Content to be snapped -->
+            <div id="dashboardContent" class="space-y-6">
                 
-                <div class="mt-4 p-3 rounded-lg border-l-4 border-[var(--c-green)] bg-[var(--c-green)]/10 text-[var(--c-dark-blue)] font-bold flex justify-between">
-                    <span>Total Activity Duration:</span>
-                    <span id="totalDurationDisplay">0 minutes</span>
-                </div>
-            </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 
-            <!-- Weight Trend Chart -->
-            <div class="card">
-                <h2 class="text-xl font-semibold mb-4 text-[var(--c-dark-blue)]">Weight Trend</h2>
-                <div class="chart-container">
-                    <canvas id="weightTrendChart" class=""></canvas>
-                    <div id="weightTrendPlaceholder" class="placeholder">
-                        <i class="fas fa-chart-line text-4xl mb-2 text-gray-400"></i>
-                        <p class="italic text-sm">Log at least two weight entries to see the trend.</p>
-                        <p class="text-xs mt-1 text-gray-500">Weight is recorded when saving Daily Metrics.</p>
+                    <!-- Weekly Calorie Trend Chart -->
+                    <div class="card">
+                        <h3 class="text-xl font-semibold mb-4 text-[var(--c-dark-blue)] flex items-center"><i class="fas fa-utensils mr-2"></i> Weekly Calorie Trend</h3>
+                        <div class="chart-container h-72">
+                            <canvas id="weeklyCalorieTrendChart"></canvas>
+                            <div id="calorieTrendPlaceholder" class="placeholder hidden">
+                                <i class="fas fa-utensils text-4xl mb-2 text-gray-400"></i>
+                                <p class="italic text-sm">Log meals over several days to see the trend (Last 7 Days).</p>
+                            </div>
+                        </div>
+                        <div class="mt-3 text-sm text-gray-600 text-center">Calories consumed vs. Daily Goal.</div>
                     </div>
+
+                    <!-- Weekly Activity Chart -->
+                    <div class="card">
+                        <h3 class="text-xl font-semibold mb-4 text-[var(--c-dark-blue)] flex items-center"><i class="fas fa-running mr-2"></i> Weekly Activity Minutes</h3>
+                        <div class="chart-container h-72">
+                            <canvas id="weeklyActivityChart"></canvas>
+                            <div id="activityChartPlaceholder" class="placeholder hidden">
+                                <i class="fas fa-chart-bar text-4xl mb-2 text-gray-400"></i>
+                                <p class="italic text-sm">Log activities to see a weekly breakdown (Last 7 Days).</p>
+                            </div>
+                        </div>
+                        <div class="mt-3 text-sm text-gray-600 text-center">Total duration stacked by activity type.</div>
+                    </div>
+                    
+                    <!-- Weight Trend Chart -->
+                    <div class="card">
+                        <h3 class="text-xl font-semibold mb-4 text-[var(--c-dark-blue)] flex items-center"><i class="fas fa-balance-scale mr-2"></i> Weight Trend</h3>
+                        <div class="chart-container h-72">
+                            <canvas id="weightTrendChart" class=""></canvas>
+                            <div id="weightTrendPlaceholder" class="placeholder">
+                                <i class="fas fa-chart-line text-4xl mb-2 text-gray-400"></i>
+                                <p class="italic text-sm">Log at least two weight entries to see the trend.</p>
+                                <p class="text-xs mt-1 text-gray-500">Weight is recorded when saving Daily Metrics.</p>
+                            </div>
+                        </div>
+                        <div class="mt-3 text-sm text-gray-600 text-center">Track your weight loss/gain journey over time.</div>
+                    </div>
+                    
+                    <!-- Combined Weekly Health Metrics Trends (NEW POSITION) -->
+                    <div class="card">
+                        <h3 class="text-xl font-semibold mb-4 text-[var(--c-dark-blue)] flex items-center"><i class="fas fa-chart-area mr-2"></i> Combined Weekly Health Trends</h3>
+                        <div id="combinedHealthMetricsChartContainer" class="chart-container h-72">
+                            <canvas id="combinedHealthMetricsChart"></canvas>
+                            <div id="combinedHealthPlaceholder" class="placeholder hidden h-full">
+                                <i class="fas fa-chart-area text-4xl mb-2 text-gray-400"></i>
+                                <p class="italic text-sm">Log your daily metrics (Sleep, RHR, Steps) for at least two days to see the combined trend.</p>
+                            </div>
+                        </div>
+                        <p class="text-center text-sm text-gray-600 mt-2">Metrics are normalized (0-100) for trend comparison.</p>
+                    </div>
+                    
                 </div>
-                <div class="text-center mt-3 text-sm border-t pt-2">
-                    <span class="font-bold text-[var(--c-dark-blue)]">Current Weight: </span><span id="currentWeightDisplay" class="font-bold text-[var(--c-mid-blue)]">N/A</span>
-                    <span id="weightChangeDisplay" class="block text-xs mt-1 text-gray-600">Loading...</span>
+
+                <!-- Detailed Metrics Table (Not implemented, placeholder) -->
+                <div class="card mt-8">
+                    <h3 class="text-2xl font-semibold mb-4 text-[var(--c-dark-blue)]"><i class="fas fa-table mr-2"></i> Detailed Daily Data</h3>
+                    <p class="text-gray-600 italic">Data is stored in your browser's local storage. Clearing browser data will erase all your logs.</p>
                 </div>
             </div>
 
-        </section>
+            <div id="loadingMessage" class="hidden text-center text-lg text-gray-500 mt-4">
+                <i class="fas fa-spinner fa-spin mr-2"></i> Generating image...
+            </div>
+        </div>
+
+        <!-- ---------------------------------------------------- -->
+        <!-- PAGE 3: SETTINGS VIEW -->
+        <!-- ---------------------------------------------------- -->
+        <div id="settingsPage" class="hidden space-y-8 p-4 md:p-8">
+            <h2 class="text-3xl font-bold text-center text-[var(--c-dark-blue)]">Application Settings</h2>
+            
+            <!-- Goal Setting Card -->
+            <div class="card max-w-lg mx-auto">
+                <h3 class="text-2xl font-semibold mb-4 text-[var(--c-mid-blue)]"><i class="fas fa-bullseye mr-2"></i> Goal Settings</h3>
+                <form onsubmit="setCalorieGoal(event)" class="space-y-4">
+                    <div>
+                        <label for="calorieGoalInput" class="block text-sm font-medium mb-1">Daily Calorie Goal (kcal)</label>
+                        <input type="number" id="calorieGoalInput" min="1000" step="50" class="w-full p-2 border border-gray-300 rounded-lg" required>
+                    </div>
+                    <button type="submit" class="btn-primary w-full">Update Goal</button>
+                </form>
+            </div>
+
+            <!-- Local Storage Info Card -->
+            <div class="card max-w-lg mx-auto">
+                <h3 class="text-2xl font-semibold mb-4 text-[var(--c-dark-blue)]"><i class="fas fa-database mr-2"></i> Storage Information</h3>
+                <p class="text-gray-700">All application data is currently stored locally in your browser's Local Storage.</p>
+                <p class="text-sm text-gray-500 mt-2">
+                    Storage Key Prefix: <span class="font-mono text-xs text-[var(--c-dark-blue)]">wellnessTracker_</span><br>
+                    Note: Data is private to this browser.
+                </p>
+                <button onclick="clearAllData()" class="mt-4 bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition duration-150 text-sm w-full">
+                    <i class="fas fa-trash mr-2"></i> Clear All Local Data
+                </button>
+            </div>
+
+        </div>
 
     </main>
 
+    <script>
+        // --- Configuration & Global State ---
+        let currentDate = new Date();
+        let dailyMetrics = {}; // Stores metrics for the current day
+        let activityLog = []; // Stores activity entries for the current day
+        let nutritionLog = []; // Stores nutrition entries for the current day
+        let calorieGoal = 2000;
+        let activeMealType = 'Breakfast';
+
+        // Chart instances
+        let calorieTrendChart = null;
+        let activityChart = null;
+        let weightTrendChart = null;
+        let combinedHealthMetricsChart = null;
+
+        const STORAGE_PREFIX = 'wellnessTracker_';
+        const STORAGE_KEY_SETTINGS = STORAGE_PREFIX + 'settings';
+        const STORAGE_KEY_NUTRITION = STORAGE_PREFIX + 'nutritionLog'; // Stores ALL nutrition entries
+        const STORAGE_PREFIX_METRICS = STORAGE_PREFIX + 'dailyMetrics_'; // Metric key: dailyMetrics_YYYY-MM-DD
+
+        // --- Local Storage Helper Functions ---
+
+        const getData = (key, defaultValue = null) => {
+            try {
+                const item = localStorage.getItem(key);
+                return item ? JSON.parse(item) : defaultValue;
+            } catch (e) {
+                console.error("Error reading localStorage key:", key, e);
+                return defaultValue;
+            }
+        };
+
+        const setData = (key, value) => {
+            try {
+                localStorage.setItem(key, JSON.stringify(value));
+            } catch (e) {
+                console.error("Error writing to localStorage key:", key, e);
+            }
+        };
+
+        const getMetricKey = (dateString) => STORAGE_PREFIX_METRICS + dateString;
+
+        // --- Core Application Logic ---
+
+        window.initApp = () => {
+            // Set date to today and load data
+            const today = formatDate(new Date());
+            document.getElementById('currentDate').value = today;
+            currentDate = dateFromInput(today);
+            
+            loadSettings();
+            loadDayData();
+
+            // Set up initial navigation page
+            showPage('tracker');
+        };
+
+        window.loadSettings = () => {
+            const settings = getData(STORAGE_KEY_SETTINGS, { calorieGoal: 2000 });
+            calorieGoal = settings.calorieGoal;
+            document.getElementById('calorieGoalDisplay').textContent = calorieGoal;
+            document.getElementById('calorieGoalInput').value = calorieGoal;
+            // Update remaining calories immediately
+            updateNutritionCalorieSummary();
+        };
+
+        window.setCalorieGoal = (event) => {
+            event.preventDefault();
+            const newGoal = parseInt(document.getElementById('calorieGoalInput').value, 10);
+            if (newGoal >= 1000) {
+                calorieGoal = newGoal;
+                setData(STORAGE_KEY_SETTINGS, { calorieGoal: newGoal });
+                loadSettings(); // Reload and update UI
+            } else {
+                console.error("Calorie goal must be at least 1000.");
+            }
+            // Simple visual feedback (no alerts allowed)
+            const btn = event.submitter;
+            btn.textContent = 'Goal Updated!';
+            setTimeout(() => { btn.textContent = 'Update Goal'; }, 1500);
+        };
+
+        window.clearAllData = () => {
+             // Using prompt instead of confirm/alert
+             const result = window.prompt("WARNING: This will delete ALL your data stored in this browser. Type 'DELETE DATA' to confirm:");
+             if (result === 'DELETE DATA') {
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && key.startsWith(STORAGE_PREFIX)) { // Added check for null key
+                        localStorage.removeItem(key);
+                    }
+                }
+                // Reset state and reload UI
+                nutritionLog = [];
+                dailyMetrics = {};
+                activityLog = [];
+                initApp(); // Re-initialize to default state
+                // Since alerts are disallowed, we use console feedback and UI update
+                console.log('All wellness data has been cleared from local storage.');
+                
+                const deleteBtn = document.querySelector('#settingsPage button[onclick="clearAllData()"]');
+                deleteBtn.textContent = 'Data Cleared!';
+                deleteBtn.classList.add('bg-green-500');
+                deleteBtn.classList.remove('bg-red-500');
+                setTimeout(() => { 
+                    deleteBtn.textContent = 'Clear All Local Data'; 
+                    deleteBtn.classList.add('bg-red-500');
+                    deleteBtn.classList.remove('bg-green-500');
+                }, 2000);
+
+             } else {
+                 // Using an invisible message box for feedback since alerts are disallowed
+                 console.log("Data clearing cancelled.");
+             }
+        }
+
+        // --- Daily Data Loading and Saving ---
+
+        const getDailyMetricsData = (dateString) => {
+            return getData(getMetricKey(dateString), {
+                steps: null,
+                sleep: null,
+                rhr: null,
+                weight: null,
+                activities: []
+            });
+        };
+
+        const getAllNutritionData = () => {
+            return getData(STORAGE_KEY_NUTRITION, []);
+        };
+
+        window.loadDayData = () => {
+            const dateString = document.getElementById('currentDate').value;
+            if (!dateString) return; // Guard against empty date on load
+
+            currentDate = dateFromInput(dateString);
+
+            // 1. Load Daily Metrics & Activity
+            const data = getDailyMetricsData(dateString);
+            dailyMetrics = data;
+            activityLog = data.activities || [];
+            updateMetricsUI();
+            updateActivityUI();
+
+            // 2. Load Nutrition Log
+            const allNutritionEntries = getAllNutritionData();
+            nutritionLog = allNutritionEntries
+                .filter(entry => entry.date === dateString)
+                .sort((a, b) => a.timestamp - b.timestamp);
+            updateNutritionUI(); 
+        };
+
+        window.handleMetricsSubmit = (event) => {
+            event.preventDefault();
+            const dateString = formatDate(currentDate);
+
+            // Collect data from form
+            const stepsValue = document.getElementById('steps').value;
+            const sleepValue = document.getElementById('sleep').value;
+            const rhrValue = document.getElementById('rhr').value;
+            const weightValue = document.getElementById('weight').value;
+            
+            const metrics = {
+                steps: stepsValue ? parseInt(stepsValue, 10) : null,
+                sleep: sleepValue ? parseFloat(sleepValue) : null,
+                rhr: rhrValue ? parseInt(rhrValue, 10) : null,
+                weight: weightValue ? parseFloat(weightValue) : null,
+                // Preserve existing activities if any
+                activities: dailyMetrics.activities || [] 
+            };
+            
+            // Save to Local Storage
+            setData(getMetricKey(dateString), metrics);
+            dailyMetrics = metrics; // Update local state
+
+            // Simple visual feedback
+            const btn = event.submitter;
+            btn.textContent = 'Saved!';
+            setTimeout(() => { btn.textContent = 'Save Daily Metrics'; }, 1500);
+        };
+
+        window.handleManualInput = (event) => {
+            event.preventDefault();
+            const dateString = formatDate(currentDate);
+            const foodName = document.getElementById('foodName').value.trim();
+            const calories = document.getElementById('calories').value;
+            const mealType = document.getElementById('mealTypeSelectorInput').value;
+            
+            if (foodName && calories) {
+                const newEntry = {
+                    id: Date.now(), // Simple unique ID
+                    date: dateString,
+                    meal: mealType,
+                    food: foodName,
+                    calories: parseInt(calories, 10),
+                    timestamp: Date.now()
+                };
+
+                // Load all, add new, save all
+                const allNutritionEntries = getAllNutritionData();
+                allNutritionEntries.push(newEntry);
+                setData(STORAGE_KEY_NUTRITION, allNutritionEntries);
+
+                // Reload current day's data
+                loadDayData();
+
+                // Clear form
+                document.getElementById('foodName').value = '';
+                document.getElementById('calories').value = '';
+            }
+        };
+
+        window.handleActivityInput = (event) => {
+            event.preventDefault();
+            const dateString = formatDate(currentDate);
+            const activityType = document.getElementById('activityType').value;
+            const duration = document.getElementById('activityDuration').value;
+            const notes = document.getElementById('activityNotes').value.trim();
+
+            if (duration && parseInt(duration, 10) > 0) {
+                const newActivity = {
+                    id: Date.now(),
+                    type: activityType,
+                    duration: parseInt(duration, 10),
+                    notes: notes,
+                    timestamp: Date.now()
+                };
+
+                // Get today's metrics, add activity, save back
+                const metricsData = getDailyMetricsData(dateString);
+                metricsData.activities = metricsData.activities || [];
+                metricsData.activities.push(newActivity);
+
+                setData(getMetricKey(dateString), metricsData);
+
+                // Reload current day's data
+                loadDayData();
+
+                // Clear form
+                document.getElementById('activityDuration').value = '';
+                document.getElementById('activityNotes').value = '';
+            }
+        };
+
+        window.removeNutritionEntry = (entryId) => {
+            const allNutritionEntries = getAllNutritionData();
+            const updatedEntries = allNutritionEntries.filter(entry => entry.id !== entryId);
+            setData(STORAGE_KEY_NUTRITION, updatedEntries);
+            loadDayData();
+        };
+
+        window.removeActivityEntry = (activityId) => {
+            const dateString = formatDate(currentDate);
+            const metricsData = getDailyMetricsData(dateString);
+            metricsData.activities = metricsData.activities.filter(activity => activity.id !== activityId);
+            
+            setData(getMetricKey(dateString), metricsData);
+            loadDayData();
+        };
+
+        // --- UI Update Functions ---
+
+        const updateMetricsUI = () => {
+            document.getElementById('steps').value = dailyMetrics.steps ?? '';
+            document.getElementById('sleep').value = dailyMetrics.sleep ?? '';
+            document.getElementById('rhr').value = dailyMetrics.rhr ?? '';
+            document.getElementById('weight').value = dailyMetrics.weight ?? '';
+        };
+
+        const updateNutritionUI = () => {
+            const list = document.getElementById('nutritionLogList');
+            list.innerHTML = '';
+            
+            // Filter entries for the currently active meal type
+            const filteredEntries = nutritionLog.filter(entry => entry.meal === activeMealType);
+            
+            if (filteredEntries.length === 0) {
+                list.innerHTML = '<li class="text-gray-500 italic">No entries logged for this meal yet.</li>';
+            } else {
+                filteredEntries.forEach(entry => {
+                    const li = document.createElement('li');
+                    li.className = 'flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-200';
+                    li.innerHTML = `
+                        <div class="flex-grow">
+                            <span class="font-medium">${entry.food}</span>
+                            <span class="text-sm text-gray-500 ml-2">(${entry.meal})</span>
+                        </div>
+                        <div class="font-bold text-[var(--c-green)]">${entry.calories} kcal</div>
+                        <button onclick="removeNutritionEntry(${entry.id})" class="text-gray-400 hover:text-[var(--c-bright-red)] ml-4 transition duration-150">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    `;
+                    list.appendChild(li);
+                });
+            }
+            updateNutritionCalorieSummary();
+        };
+
+        const updateNutritionCalorieSummary = () => {
+            const totalIntake = nutritionLog.reduce((sum, entry) => sum + entry.calories, 0);
+            const remaining = calorieGoal - totalIntake;
+
+            document.getElementById('calorieIntakeDisplay').textContent = totalIntake;
+            document.getElementById('calorieGoalDisplay').textContent = calorieGoal;
+            
+            const remainingEl = document.getElementById('calorieRemainingDisplay');
+            remainingEl.textContent = remaining;
+
+            if (remaining < 0) {
+                remainingEl.classList.add('text-[var(--c-bright-red)]');
+                remainingEl.classList.remove('text-[var(--c-dark-blue)]');
+            } else {
+                remainingEl.classList.remove('text-[var(--c-bright-red)]');
+                remainingEl.classList.add('text-[var(--c-dark-blue)]');
+            }
+        };
+
+        const updateActivityUI = () => {
+            const list = document.getElementById('activityLogList');
+            list.innerHTML = '';
+
+            if (activityLog.length === 0) {
+                list.innerHTML = '<li class="text-gray-500 italic">No activities logged for today.</li>';
+            } else {
+                activityLog.forEach(activity => {
+                    const li = document.createElement('li');
+                    li.className = 'flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-200';
+                    li.innerHTML = `
+                        <div class="flex-grow">
+                            <span class="font-bold text-[var(--c-bright-red)]">${activity.type}</span> 
+                            <span class="text-sm text-gray-700 ml-2">${activity.notes ? `(${activity.notes})` : ''}</span>
+                        </div>
+                        <div class="font-medium text-[var(--c-dark-blue)]">${activity.duration} min</div>
+                        <button onclick="removeActivityEntry(${activity.id})" class="text-gray-400 hover:text-[var(--c-bright-red)] ml-4 transition duration-150">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    `;
+                    list.appendChild(li);
+                });
+            }
+        };
+
+        // --- Navigation and Date Helpers ---
+
+        window.showPage = (pageId) => {
+            document.querySelectorAll('div[id$="Page"]').forEach(page => {
+                page.classList.add('hidden');
+            });
+            document.getElementById(pageId + 'Page').classList.remove('hidden');
+
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+                if (link.dataset.page === pageId) {
+                    link.classList.add('active');
+                }
+            });
+
+            // If navigating to dashboard, refresh charts
+            if (pageId === 'dashboard') {
+                renderDashboardCharts();
+            }
+        };
+
+        window.switchMealType = (mealType) => {
+            activeMealType = mealType;
+            document.getElementById('mealTypeSelectorInput').value = mealType;
+            document.getElementById('activeMealTypeDisplay').textContent = mealType;
+            
+            document.querySelectorAll('.meal-selector').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.meal === mealType) {
+                    btn.classList.add('active');
+                }
+            });
+            updateNutritionUI();
+        };
+
+        const formatDate = (date) => {
+            // Ensure we use YYYY-MM-DD format for input compatibility
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        const dateFromInput = (dateString) => {
+            const parts = dateString.split('-');
+            // Use UTC to prevent timezone shifts from changing the day, but JS Date objects
+            // are generally fine for simple YYYY-MM-DD input date handling.
+            const date = new Date(parts[0], parts[1] - 1, parts[2]);
+            date.setHours(0, 0, 0, 0); // Normalize to start of day
+            return date;
+        }
+
+        window.changeDate = (days) => {
+            const input = document.getElementById('currentDate');
+            let currentDay = dateFromInput(input.value);
+            
+            currentDay.setDate(currentDay.getDate() + days);
+            
+            input.value = formatDate(currentDay);
+            currentDate = currentDay;
+            loadDayData();
+        };
+
+        // --- Dashboard & Charting Logic ---
+
+        // Helper to get the date N days ago as a Date object (midnight UTC)
+        const getDateNDaysAgo = (n) => {
+            const date = new Date();
+            date.setHours(0, 0, 0, 0); // Start of day
+            date.setDate(date.getDate() - n);
+            return date;
+        };
+        
+        // Helper to get all data for the last N days
+        const getRecentData = (days = 7) => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const dataMap = {};
+            const labels = [];
+            
+            // Fetch all global nutrition data once
+            const allNutritionEntries = getAllNutritionData();
+
+            for (let i = days - 1; i >= 0; i--) {
+                const dayDate = getDateNDaysAgo(i);
+                const dateString = formatDate(dayDate);
+                // Use a short label for chart X-axis (e.g., M/D)
+                labels.push(`${dayDate.getMonth() + 1}/${dayDate.getDate()}`); 
+
+                const metrics = getDailyMetricsData(dateString);
+                
+                // Calculate total calories for the day
+                const dailyNutrition = allNutritionEntries.filter(entry => entry.date === dateString);
+                const totalCalories = dailyNutrition.reduce((sum, entry) => sum + entry.calories, 0);
+
+                dataMap[dateString] = {
+                    date: dateString,
+                    metrics: metrics,
+                    totalCalories: totalCalories
+                };
+            }
+            return { dataMap, labels };
+        };
+
+        window.renderDashboardCharts = () => {
+            const { dataMap, labels } = getRecentData(7);
+            const allData = Object.values(dataMap);
+
+            // Fetch current settings for the goal
+            loadSettings();
+
+            renderCalorieTrendChart(labels, allData);
+            renderActivityChart(labels, allData);
+            renderWeightTrendChart(labels, allData);
+            renderCombinedHealthMetricsChart(labels, allData);
+        };
+
+        // ----------------------------------------------------
+        // Chart 1: Weekly Calorie Trend
+        // ----------------------------------------------------
+        const renderCalorieTrendChart = (labels, allData) => {
+            const calories = allData.map(d => d.totalCalories);
+            const goals = allData.map(() => calorieGoal);
+            
+            const hasData = calories.some(c => c > 0);
+            document.getElementById('calorieTrendPlaceholder').classList.toggle('hidden', hasData);
+
+            if (!hasData) {
+                if (calorieTrendChart) calorieTrendChart.destroy();
+                calorieTrendChart = null;
+                return;
+            }
+
+            const ctx = document.getElementById('weeklyCalorieTrendChart').getContext('2d');
+            if (calorieTrendChart) calorieTrendChart.destroy();
+
+            calorieTrendChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Calories Consumed',
+                            data: calories,
+                            backgroundColor: 'rgba(61, 204, 123, 0.8)', // var(--c-green)
+                            borderColor: 'rgba(61, 204, 123, 1)',
+                            borderWidth: 1,
+                            yAxisID: 'y'
+                        },
+                        {
+                            type: 'line',
+                            label: 'Goal',
+                            data: goals,
+                            borderColor: 'rgba(10, 36, 99, 1)', // var(--c-dark-blue)
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0.1,
+                            yAxisID: 'y'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Calories (kcal)' }
+                        },
+                        x: {
+                            title: { display: true, text: 'Date (M/D)' }
+                        }
+                    },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: { mode: 'index', intersect: false }
+                    }
+                }
+            });
+        };
+
+        // ----------------------------------------------------
+        // Chart 2: Weekly Activity Minutes
+        // ----------------------------------------------------
+        const renderActivityChart = (labels, allData) => {
+            // Aggregate minutes by date and activity type
+            const aggregatedData = {};
+            const activityTypes = new Set();
+            
+            allData.forEach(day => {
+                day.metrics.activities.forEach(activity => {
+                    const type = activity.type;
+                    activityTypes.add(type);
+                    if (!aggregatedData[type]) {
+                        // Initialize array for this activity type with zeros
+                        aggregatedData[type] = new Array(labels.length).fill(0);
+                    }
+                    
+                    // The label is in M/D format, need to find the index based on position
+                    const dayDate = new Date(day.date);
+                    const shortDate = `${dayDate.getMonth() + 1}/${dayDate.getDate()}`;
+                    const index = labels.indexOf(shortDate);
+
+                    if (index !== -1) {
+                        aggregatedData[type][index] += activity.duration;
+                    }
+                });
+            });
+
+            const hasData = activityTypes.size > 0;
+            document.getElementById('activityChartPlaceholder').classList.toggle('hidden', hasData);
+
+            if (!hasData) {
+                if (activityChart) activityChart.destroy();
+                activityChart = null;
+                return;
+            }
+
+            const activityColors = {
+                Running: 'rgba(216, 49, 91, 0.7)', // Bright Red
+                Walking: 'rgba(62, 146, 204, 0.7)', // Mid Blue
+                Weights: 'rgba(10, 36, 99, 0.7)', // Dark Blue
+                Yoga: 'rgba(61, 204, 123, 0.7)', // Green
+                Cycling: 'rgba(255, 159, 64, 0.7)',
+                Other: 'rgba(153, 102, 255, 0.7)'
+            };
+
+            const datasets = Array.from(activityTypes).map(type => ({
+                label: type,
+                data: aggregatedData[type],
+                backgroundColor: activityColors[type] || 'rgba(128, 128, 128, 0.7)',
+                stack: 'Stack 1' // Stack the bars
+            }));
+
+            const ctx = document.getElementById('weeklyActivityChart').getContext('2d');
+            if (activityChart) activityChart.destroy();
+
+            activityChart = new Chart(ctx, {
+                type: 'bar',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { stacked: true, title: { display: true, text: 'Date (M/D)' } },
+                        y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Minutes' } }
+                    },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: { mode: 'index', intersect: false }
+                    }
+                }
+            });
+        };
+        
+        // ----------------------------------------------------
+        // Chart 3: Weight Trend
+        // ----------------------------------------------------
+        const renderWeightTrendChart = (labels, allData) => {
+            // Filter out null weight values and corresponding labels
+            const trackedData = allData.filter(d => d.metrics.weight !== null);
+            const weights = trackedData.map(d => d.metrics.weight);
+            const weightLabels = trackedData.map(d => {
+                const date = new Date(d.date);
+                return `${date.getMonth() + 1}/${date.getDate()}`;
+            });
+            
+            const hasData = weights.length >= 2;
+            document.getElementById('weightTrendPlaceholder').classList.toggle('hidden', hasData);
+
+            if (!hasData) {
+                if (weightTrendChart) weightTrendChart.destroy();
+                weightTrendChart = null;
+                return;
+            }
+
+            const ctx = document.getElementById('weightTrendChart').getContext('2d');
+            if (weightTrendChart) weightTrendChart.destroy();
+
+            weightTrendChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: weightLabels,
+                    datasets: [{
+                        label: 'Weight',
+                        data: weights,
+                        borderColor: 'rgba(62, 146, 204, 1)', // Mid Blue
+                        backgroundColor: 'rgba(62, 146, 204, 0.2)',
+                        borderWidth: 3,
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 6,
+                        pointBackgroundColor: 'rgba(10, 36, 99, 1)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            title: { display: true, text: 'Weight (Lbs/Kg)' },
+                            reverse: false // Typically, weight loss is down
+                        },
+                        x: {
+                            title: { display: true, text: 'Date (M/D)' }
+                        }
+                    },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: { mode: 'index', intersect: false }
+                    }
+                }
+            });
+        };
+        
+        // ----------------------------------------------------
+        // Chart 4: Combined Health Metrics
+        // ----------------------------------------------------
+        const renderCombinedHealthMetricsChart = (labels, allData) => {
+            
+            // --- Normalization Logic (0-100 scale) ---
+            const stepsValues = allData.map(d => d.metrics.steps).filter(v => v !== null);
+            const sleepValues = allData.map(d => d.metrics.sleep).filter(v => v !== null);
+            const rhrValues = allData.map(d => d.metrics.rhr).filter(v => v !== null);
+
+            const hasData = stepsValues.length >= 2 || sleepValues.length >= 2 || rhrValues.length >= 2;
+            document.getElementById('combinedHealthPlaceholder').classList.toggle('hidden', hasData);
+
+            if (!hasData) {
+                if (combinedHealthMetricsChart) combinedHealthMetricsChart.destroy();
+                combinedHealthMetricsChart = null;
+                return;
+            }
+            
+            // Helper to determine min/max safely
+            const getMinMax = (values) => ({
+                min: values.length > 0 ? Math.min(...values) : 0,
+                max: values.length > 0 ? Math.max(...values) : 1
+            });
+            
+            const minMax = {
+                steps: getMinMax(stepsValues),
+                sleep: getMinMax(sleepValues),
+                rhr: getMinMax(rhrValues)
+            };
+
+            const normalize = (value, min, max, isReverse = false) => {
+                if (value === null) return null;
+                if (min === max) return 50; // Use 50 if no range
+                
+                const normalized = 100 * (value - min) / (max - min);
+                return isReverse ? 100 - normalized : normalized;
+            };
+            
+            const normalizedSteps = allData.map(d => 
+                normalize(d.metrics.steps, minMax.steps.min, minMax.steps.max, false)
+            );
+            const normalizedSleep = allData.map(d => 
+                normalize(d.metrics.sleep, minMax.sleep.min, minMax.sleep.max, false)
+            );
+            // RHR is better when lower, so we reverse the normalization
+            const normalizedRHR = allData.map(d => 
+                normalize(d.metrics.rhr, minMax.rhr.min, minMax.rhr.max, true) 
+            );
+
+            const ctx = document.getElementById('combinedHealthMetricsChart').getContext('2d');
+            if (combinedHealthMetricsChart) combinedHealthMetricsChart.destroy();
+
+            combinedHealthMetricsChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Steps (Normalized)',
+                            data: normalizedSteps,
+                            borderColor: 'rgba(62, 146, 204, 1)', // Mid Blue
+                            backgroundColor: 'rgba(62, 146, 204, 0.2)',
+                            tension: 0.4,
+                            fill: false,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Sleep (Normalized)',
+                            data: normalizedSleep,
+                            borderColor: 'rgba(61, 204, 123, 1)', // Green
+                            backgroundColor: 'rgba(61, 204, 123, 0.2)',
+                            tension: 0.4,
+                            fill: false,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'RHR (Normalized, Lower is Better)',
+                            data: normalizedRHR,
+                            borderColor: 'rgba(216, 49, 91, 1)', // Bright Red
+                            backgroundColor: 'rgba(216, 49, 91, 0.2)',
+                            tension: 0.4,
+                            fill: false,
+                            yAxisID: 'y'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: { display: true, text: 'Normalized Score (0-100)' }
+                        },
+                        x: {
+                            title: { display: true, text: 'Date (M/D)' }
+                        }
+                    },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: { mode: 'index', intersect: false }
+                    }
+                }
+            });
+        };
+        
+        // ----------------------------------------------------
+        // SNAPSHOT LOGIC
+        // ----------------------------------------------------
+        window.snapDashboard = async () => {
+            const element = document.getElementById('dashboardContent');
+            const button = document.getElementById('snapDashboardButton');
+            const loading = document.getElementById('loadingMessage');
+
+            // 1. Show Loading State
+            button.disabled = true;
+            loading.classList.remove('hidden');
+            const originalButtonText = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-camera mr-2"></i> Capturing...';
+            
+            // Wait for a moment to ensure loading spinner is painted
+            await new Promise(resolve => setTimeout(resolve, 50)); 
+
+            try {
+                // 2. Capture the HTML element
+                const canvas = await html2canvas(element, {
+                    scale: 2, // Capture at a higher resolution for better quality
+                    useCORS: true,
+                    // Ignore the loading message itself
+                    ignoreElements: (el) => el.id === 'loadingMessage' || el.id === 'snapDashboardButton'
+                });
+
+                // 3. Convert Canvas to Image Data
+                const dataUrl = canvas.toDataURL('image/png');
+
+                // 4. Trigger Download
+                const a = document.createElement('a');
+                a.href = dataUrl;
+                a.download = `WellnessDashboard_${formatDate(new Date())}.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+
+                // 5. Provide feedback
+                button.innerHTML = '<i class="fas fa-check mr-2"></i> Saved!';
+                button.classList.add('bg-blue-500');
+                button.classList.remove('bg-green-500');
+
+            } catch (error) {
+                console.error("Error snapping dashboard:", error);
+                // Handle error without alert
+                button.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i> Error!';
+                button.classList.add('bg-red-500');
+                button.classList.remove('bg-green-500');
+            } finally {
+                // 6. Reset state
+                loading.classList.add('hidden');
+                setTimeout(() => {
+                    button.disabled = false;
+                    button.innerHTML = originalButtonText;
+                    button.classList.remove('bg-blue-500', 'bg-red-500');
+                    button.classList.add('bg-green-500');
+                }, 2000);
+            }
+        };
+
+        // Initialize the app when the body loads
+        // initApp() is now called from the <body> onload attribute
+    </script>
 </body>
 </html>
